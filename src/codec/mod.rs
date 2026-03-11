@@ -2,8 +2,8 @@ use std::io::Cursor;
 
 use ciborium::de::from_reader;
 use ciborium::ser::into_writer;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use thiserror::Error;
 
 use crate::protocol::MAX_FRAME_SIZE;

@@ -2,8 +2,8 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use thiserror::Error as ThisError;
 
 use crate::runtime::{ClientRuntime, RegisteredHandler, ServerRuntime};
@@ -121,7 +121,8 @@ impl Client {
         Req: Serialize,
         Resp: DeserializeOwned,
     {
-        self.call_with(method, request, CallOptions::default()).await
+        self.call_with(method, request, CallOptions::default())
+            .await
     }
 
     pub async fn call_with<Req, Resp>(
@@ -137,4 +138,3 @@ impl Client {
         self.runtime.call(method, request, options).await
     }
 }
-

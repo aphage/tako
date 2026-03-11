@@ -12,4 +12,3 @@ fn call_options_default_to_empty() {
     assert!(options.timeout.is_none());
     assert!(options.trace_id.is_none());
 }
-

@@ -5,30 +5,33 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Deserialize;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tokio::sync::Mutex;
 use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::api::{CallOptions, Error, IpcAddress, RequestContext, ServiceError};
-use crate::codec::{decode_cbor, decode_frame, encode_cbor, encode_frame, CodecError};
+use crate::codec::{CodecError, decode_cbor, decode_frame, encode_cbor, encode_frame};
 use crate::observability;
 use crate::protocol::{
-    ErrorBody, MessageType, RequestEnvelope, ResponseEnvelope, DECODE_ERROR, INTERNAL_ERROR,
-    INVALID_REQUEST, METHOD_NOT_FOUND, PROTOCOL_VERSION, TIMEOUT,
+    DECODE_ERROR, ErrorBody, INTERNAL_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, MessageType,
+    PROTOCOL_VERSION, RequestEnvelope, ResponseEnvelope, TIMEOUT,
 };
-#[cfg(unix)]
-use tokio::net::UnixStream;
 #[cfg(unix)]
 use crate::transport::unix::{bind_listener, cleanup_socket_file, connect_stream};
 #[cfg(windows)]
-use tokio::net::windows::named_pipe::NamedPipeClient;
-#[cfg(windows)]
 use crate::transport::windows_named_pipe::{create_server, open_client};
+#[cfg(unix)]
+use tokio::net::UnixStream;
+#[cfg(windows)]
+use tokio::net::windows::named_pipe::NamedPipeClient;
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 type RawHandler = Arc<
-    dyn Fn(RequestContext, &[u8]) -> BoxFuture<Result<Vec<u8>, ServiceError>> + Send + Sync + 'static,
+    dyn Fn(RequestContext, &[u8]) -> BoxFuture<Result<Vec<u8>, ServiceError>>
+        + Send
+        + Sync
+        + 'static,
 >;
 
 #[derive(Debug, Deserialize)]
@@ -154,7 +157,7 @@ impl ServerRuntime {
             _ => {
                 return Err(Error::ConnectFailed {
                     message: "unix runtime requires unix socket address".into(),
-                })
+                });
             }
         };
         let handlers = Arc::new(self.handlers);
@@ -264,7 +267,9 @@ impl ClientRuntime {
                     let decoded = self.decode_response_frame(&response);
                     match &decoded {
                         Ok(_) => log_client_call_finish(&meta, None, platform_name()),
-                        Err(err) => log_client_call_finish(&meta, error_code_of(err), platform_name()),
+                        Err(err) => {
+                            log_client_call_finish(&meta, error_code_of(err), platform_name())
+                        }
                     }
                     return decoded;
                 }
@@ -287,7 +292,9 @@ impl ClientRuntime {
                     let decoded = self.decode_response_frame(&response);
                     match &decoded {
                         Ok(_) => log_client_call_finish(&meta, None, platform_name()),
-                        Err(err) => log_client_call_finish(&meta, error_code_of(err), platform_name()),
+                        Err(err) => {
+                            log_client_call_finish(&meta, error_code_of(err), platform_name())
+                        }
                     }
                     return decoded;
                 }
@@ -328,7 +335,11 @@ impl ClientRuntime {
             request_id: Uuid::new_v4().to_string(),
             method: method.to_string(),
             deadline_ms: options.timeout.and_then(deadline_from_now),
-            trace_id: Some(options.trace_id.unwrap_or_else(|| Uuid::new_v4().to_string())),
+            trace_id: Some(
+                options
+                    .trace_id
+                    .unwrap_or_else(|| Uuid::new_v4().to_string()),
+            ),
             payload,
             metadata: None,
         };
@@ -342,12 +353,10 @@ impl ClientRuntime {
     {
         let payload = decode_frame(frame).map_err(codec_error_to_protocol)?;
         let response: ResponseEnvelope = decode_cbor(payload).map_err(codec_error_to_protocol)?;
-        response
-            .validate()
-            .map_err(|message| Error::Protocol {
-                code: INVALID_REQUEST.into(),
-                message: message.into(),
-            })?;
+        response.validate().map_err(|message| Error::Protocol {
+            code: INVALID_REQUEST.into(),
+            message: message.into(),
+        })?;
 
         if let Some(error) = response.error {
             if error.code == INVALID_REQUEST {
@@ -477,7 +486,7 @@ async fn ensure_connected_unix_client<'a>(
             _ => {
                 return Err(Error::ConnectFailed {
                     message: "unix runtime requires unix socket address".into(),
-                })
+                });
             }
         };
         let client = connect_stream(path).await.map_err(io_error_to_local)?;
@@ -549,7 +558,9 @@ async fn ensure_connected_client<'a>(
 }
 
 #[cfg(windows)]
-async fn open_named_pipe_client_with_retry(path: &str) -> Result<tokio::net::windows::named_pipe::NamedPipeClient, Error> {
+async fn open_named_pipe_client_with_retry(
+    path: &str,
+) -> Result<tokio::net::windows::named_pipe::NamedPipeClient, Error> {
     const MAX_ATTEMPTS: usize = 50;
     const PIPE_BUSY: i32 = 231;
 
@@ -719,7 +730,12 @@ async fn handle_frame_with_handlers(
     if response_error_code == Some(DECODE_ERROR) {
         log_server_decode_error(&request, connection_id, platform_name());
     }
-    log_server_request_finish(&request, response_error_code, connection_id, platform_name());
+    log_server_request_finish(
+        &request,
+        response_error_code,
+        connection_id,
+        platform_name(),
+    );
 
     encode_response_frame(&response)
 }
@@ -742,9 +758,7 @@ fn invalid_request_response(request: &RequestEnvelope) -> Result<Vec<u8>, Error>
     encode_response_frame(&response)
 }
 
-fn parse_request_envelope(
-    payload: &[u8],
-) -> Result<RequestEnvelope, ParseRequestEnvelopeError> {
+fn parse_request_envelope(payload: &[u8]) -> Result<RequestEnvelope, ParseRequestEnvelopeError> {
     let loose: LooseRequestEnvelope = decode_cbor(payload)
         .map_err(codec_error_to_protocol)
         .map_err(ParseRequestEnvelopeError::Protocol)?;
@@ -905,12 +919,12 @@ mod tests {
     use std::time::Duration;
 
     use super::{
-        log_client_call_finish, ClientRuntime, RegisteredHandler, RequestMeta, ServerRuntime,
+        ClientRuntime, RegisteredHandler, RequestMeta, ServerRuntime, log_client_call_finish,
     };
     use crate::api::{CallOptions, Error, IpcAddress, ServiceError};
     use crate::codec::{decode_cbor, encode_cbor, encode_frame};
     use crate::observability;
-    use crate::protocol::{MessageType, RequestEnvelope, PROTOCOL_VERSION};
+    use crate::protocol::{MessageType, PROTOCOL_VERSION, RequestEnvelope};
     use tracing::subscriber::with_default;
     use tracing_subscriber::fmt;
 
@@ -951,13 +965,8 @@ mod tests {
 
         with_default(subscriber, run);
 
-        String::from_utf8(
-            buffer
-                .lock()
-                .expect("buffer lock should succeed")
-                .clone(),
-        )
-        .expect("logs should be utf-8")
+        String::from_utf8(buffer.lock().expect("buffer lock should succeed").clone())
+            .expect("logs should be utf-8")
     }
 
     #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -975,9 +984,12 @@ mod tests {
         let client = ClientRuntime::new(IpcAddress::NamedPipe("demo".into()));
         let mut server = ServerRuntime::new(IpcAddress::NamedPipe("demo".into()));
         server
-            .register("ping", RegisteredHandler::new(|_ctx, req: PingRequest| async move {
-                Ok(PingResponse { value: req.value })
-            }))
+            .register(
+                "ping",
+                RegisteredHandler::new(|_ctx, req: PingRequest| async move {
+                    Ok(PingResponse { value: req.value })
+                }),
+            )
             .expect("register should succeed");
 
         let request = client
@@ -1015,9 +1027,12 @@ mod tests {
         let client = ClientRuntime::new(IpcAddress::NamedPipe("demo".into()));
         let mut server = ServerRuntime::new(IpcAddress::NamedPipe("demo".into()));
         server
-            .register("ping", RegisteredHandler::new(|_ctx, req: PingRequest| async move {
-                Ok(PingResponse { value: req.value })
-            }))
+            .register(
+                "ping",
+                RegisteredHandler::new(|_ctx, req: PingRequest| async move {
+                    Ok(PingResponse { value: req.value })
+                }),
+            )
             .expect("register should succeed");
 
         let request = client
@@ -1085,12 +1100,15 @@ mod tests {
         let client = ClientRuntime::new(IpcAddress::NamedPipe("demo".into()));
         let mut server = ServerRuntime::new(IpcAddress::NamedPipe("demo".into()));
         server
-            .register("ping", RegisteredHandler::new(|_ctx, _req: PingRequest| async move {
-                Err::<PingResponse, ServiceError>(ServiceError {
-                    code: "internal_error".into(),
-                    message: "boom".into(),
-                })
-            }))
+            .register(
+                "ping",
+                RegisteredHandler::new(|_ctx, _req: PingRequest| async move {
+                    Err::<PingResponse, ServiceError>(ServiceError {
+                        code: "internal_error".into(),
+                        message: "boom".into(),
+                    })
+                }),
+            )
             .expect("register should succeed");
 
         let request = client
@@ -1126,9 +1144,12 @@ mod tests {
         let client = ClientRuntime::new(IpcAddress::NamedPipe("demo".into()));
         let mut server = ServerRuntime::new(IpcAddress::NamedPipe("demo".into()));
         server
-            .register("ping", RegisteredHandler::new(|_ctx, req: PingRequest| async move {
-                Ok(PingResponse { value: req.value })
-            }))
+            .register(
+                "ping",
+                RegisteredHandler::new(|_ctx, req: PingRequest| async move {
+                    Ok(PingResponse { value: req.value })
+                }),
+            )
             .expect("register should succeed");
 
         let request = client
@@ -1195,9 +1216,12 @@ mod tests {
                 let client = ClientRuntime::new(IpcAddress::NamedPipe("demo".into()));
                 let mut server = ServerRuntime::new(IpcAddress::NamedPipe("demo".into()));
                 server
-                    .register("ping", RegisteredHandler::new(|_ctx, req: PingRequest| async move {
-                        Ok(PingResponse { value: req.value })
-                    }))
+                    .register(
+                        "ping",
+                        RegisteredHandler::new(|_ctx, req: PingRequest| async move {
+                            Ok(PingResponse { value: req.value })
+                        }),
+                    )
                     .expect("register should succeed");
 
                 let request = client

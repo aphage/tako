@@ -1,4 +1,4 @@
-use tako_ipc::codec::{decode_frame, encode_frame, validate_length, CodecError};
+use tako_ipc::codec::{CodecError, decode_frame, encode_frame, validate_length};
 use tako_ipc::codec::{decode_cbor, encode_cbor};
 use tako_ipc::protocol::MAX_FRAME_SIZE;
 

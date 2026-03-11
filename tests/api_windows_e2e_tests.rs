@@ -3,13 +3,13 @@
 use std::io;
 use std::time::Duration;
 
-use tako_ipc::{CallOptions, Client, Error, IpcAddress, Server};
 use tako_ipc::codec::{decode_cbor, encode_cbor, encode_frame};
-use tako_ipc::protocol::{MessageType, RequestEnvelope, ResponseEnvelope, PROTOCOL_VERSION};
+use tako_ipc::protocol::{MessageType, PROTOCOL_VERSION, RequestEnvelope, ResponseEnvelope};
 use tako_ipc::transport::windows_named_pipe::{create_server, open_client};
 use tako_ipc::transport::{read_frame_io, write_frame_io};
-use tokio::sync::oneshot;
+use tako_ipc::{CallOptions, Client, Error, IpcAddress, Server};
 use tokio::io::AsyncWriteExt;
+use tokio::sync::oneshot;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -62,7 +62,9 @@ async fn spawn_test_server() -> io::Result<(
     Ok((addr, shutdown_tx, server_task))
 }
 
-async fn open_raw_client(addr: &IpcAddress) -> io::Result<tokio::net::windows::named_pipe::NamedPipeClient> {
+async fn open_raw_client(
+    addr: &IpcAddress,
+) -> io::Result<tokio::net::windows::named_pipe::NamedPipeClient> {
     const PIPE_BUSY: i32 = 231;
 
     for attempt in 0..50 {

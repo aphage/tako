@@ -2,7 +2,9 @@
 
 use std::io;
 
-use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient, NamedPipeServer, ServerOptions};
+use tokio::net::windows::named_pipe::{
+    ClientOptions, NamedPipeClient, NamedPipeServer, ServerOptions,
+};
 
 pub fn create_server(path: &str, first_instance: bool) -> io::Result<NamedPipeServer> {
     let mut options = ServerOptions::new();

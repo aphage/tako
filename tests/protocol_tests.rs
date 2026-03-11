@@ -1,4 +1,6 @@
-use tako_ipc::protocol::{ErrorBody, MessageType, RequestEnvelope, ResponseEnvelope, PROTOCOL_VERSION};
+use tako_ipc::protocol::{
+    ErrorBody, MessageType, PROTOCOL_VERSION, RequestEnvelope, ResponseEnvelope,
+};
 
 #[test]
 fn protocol_version_is_frozen() {

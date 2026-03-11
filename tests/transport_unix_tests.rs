@@ -16,7 +16,10 @@ fn temp_socket_path(label: &str) -> std::path::PathBuf {
 #[test]
 fn bind_listener_creates_restricted_parent_and_socket_permissions() -> io::Result<()> {
     let path = temp_socket_path("permissions");
-    let parent = path.parent().expect("socket path should have parent").to_path_buf();
+    let parent = path
+        .parent()
+        .expect("socket path should have parent")
+        .to_path_buf();
 
     let listener = bind_listener(&path)?;
     drop(listener);

@@ -4,11 +4,11 @@ use std::io;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use tako_ipc::{CallOptions, Client, Error, IpcAddress, Server};
 use tako_ipc::codec::{decode_cbor, encode_cbor, encode_frame};
-use tako_ipc::protocol::{MessageType, RequestEnvelope, ResponseEnvelope, PROTOCOL_VERSION};
+use tako_ipc::protocol::{MessageType, PROTOCOL_VERSION, RequestEnvelope, ResponseEnvelope};
 use tako_ipc::transport::unix::{bind_listener, cleanup_socket_file, connect_stream};
 use tako_ipc::transport::{read_frame_io, write_frame_io};
+use tako_ipc::{CallOptions, Client, Error, IpcAddress, Server};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::oneshot;
 use uuid::Uuid;
@@ -86,7 +86,9 @@ async fn unix_public_api_roundtrip() -> io::Result<()> {
         .await
         .map_err(|err| io::Error::other(err.to_string()))?;
 
-    shutdown_tx.send(()).map_err(|_| io::Error::other("failed to send shutdown"))?;
+    shutdown_tx
+        .send(())
+        .map_err(|_| io::Error::other("failed to send shutdown"))?;
     server_task
         .await
         .map_err(|err| io::Error::other(err.to_string()))?
@@ -116,7 +118,9 @@ async fn unix_public_api_returns_method_not_found() -> io::Result<()> {
         .await
         .expect_err("missing method should fail");
 
-    shutdown_tx.send(()).map_err(|_| io::Error::other("failed to send shutdown"))?;
+    shutdown_tx
+        .send(())
+        .map_err(|_| io::Error::other("failed to send shutdown"))?;
     server_task
         .await
         .map_err(|err| io::Error::other(err.to_string()))?
@@ -239,7 +243,9 @@ async fn unix_invalid_length_closes_connection() -> io::Result<()> {
         io::ErrorKind::UnexpectedEof | io::ErrorKind::BrokenPipe | io::ErrorKind::ConnectionReset
     ));
 
-    shutdown_tx.send(()).map_err(|_| io::Error::other("failed to send shutdown"))?;
+    shutdown_tx
+        .send(())
+        .map_err(|_| io::Error::other("failed to send shutdown"))?;
     server_task
         .await
         .map_err(|err| io::Error::other(err.to_string()))?
@@ -269,7 +275,9 @@ async fn unix_invalid_cbor_closes_connection() -> io::Result<()> {
         io::ErrorKind::UnexpectedEof | io::ErrorKind::BrokenPipe | io::ErrorKind::ConnectionReset
     ));
 
-    shutdown_tx.send(()).map_err(|_| io::Error::other("failed to send shutdown"))?;
+    shutdown_tx
+        .send(())
+        .map_err(|_| io::Error::other("failed to send shutdown"))?;
     server_task
         .await
         .map_err(|err| io::Error::other(err.to_string()))?
@@ -318,7 +326,9 @@ async fn unix_unsupported_version_returns_invalid_request() -> io::Result<()> {
         "invalid_request"
     );
 
-    shutdown_tx.send(()).map_err(|_| io::Error::other("failed to send shutdown"))?;
+    shutdown_tx
+        .send(())
+        .map_err(|_| io::Error::other("failed to send shutdown"))?;
     server_task
         .await
         .map_err(|err| io::Error::other(err.to_string()))?
@@ -364,7 +374,9 @@ async fn unix_missing_required_field_returns_invalid_request() -> io::Result<()>
         "invalid_request"
     );
 
-    shutdown_tx.send(()).map_err(|_| io::Error::other("failed to send shutdown"))?;
+    shutdown_tx
+        .send(())
+        .map_err(|_| io::Error::other("failed to send shutdown"))?;
     server_task
         .await
         .map_err(|err| io::Error::other(err.to_string()))?
