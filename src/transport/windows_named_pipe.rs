@@ -1,5 +1,3 @@
-#![cfg(windows)]
-
 use std::io;
 
 use tokio::net::windows::named_pipe::{

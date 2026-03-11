@@ -47,7 +47,7 @@ struct LooseRequestEnvelope {
 
 enum ParseRequestEnvelopeError {
     Protocol(Error),
-    Invalid(RequestEnvelope),
+    Invalid(Box<RequestEnvelope>),
 }
 
 struct RequestMeta {
@@ -122,12 +122,12 @@ impl ServerRuntime {
     {
         #[cfg(windows)]
         {
-            return self.serve_windows(shutdown).await;
+            self.serve_windows(shutdown).await
         }
 
         #[cfg(unix)]
         {
-            return self.serve_unix(shutdown).await;
+            self.serve_unix(shutdown).await
         }
 
         #[cfg(not(any(windows, unix)))]
@@ -271,15 +271,15 @@ impl ClientRuntime {
                             log_client_call_finish(&meta, error_code_of(err), platform_name())
                         }
                     }
-                    return decoded;
+                    decoded
                 }
                 Err(Error::Timeout) => {
                     log_client_call_timeout(&meta, platform_name());
-                    return Err(Error::Timeout);
+                    Err(Error::Timeout)
                 }
                 Err(err) => {
                     log_client_call_finish(&meta, error_code_of(&err), platform_name());
-                    return Err(err);
+                    Err(err)
                 }
             }
         }
@@ -296,15 +296,15 @@ impl ClientRuntime {
                             log_client_call_finish(&meta, error_code_of(err), platform_name())
                         }
                     }
-                    return decoded;
+                    decoded
                 }
                 Err(Error::Timeout) => {
                     log_client_call_timeout(&meta, platform_name());
-                    return Err(Error::Timeout);
+                    Err(Error::Timeout)
                 }
                 Err(err) => {
                     log_client_call_finish(&meta, error_code_of(&err), platform_name());
-                    return Err(err);
+                    Err(err)
                 }
             }
         }
@@ -780,7 +780,7 @@ fn parse_request_envelope(payload: &[u8]) -> Result<RequestEnvelope, ParseReques
         || request.method.is_empty()
         || request.payload.is_empty()
     {
-        return Err(ParseRequestEnvelopeError::Invalid(request));
+        return Err(ParseRequestEnvelopeError::Invalid(Box::new(request)));
     }
 
     Ok(request)
