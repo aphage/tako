@@ -13,8 +13,8 @@ fn temp_socket_path(label: &str) -> std::path::PathBuf {
         .join("ipc.sock")
 }
 
-#[test]
-fn bind_listener_creates_restricted_parent_and_socket_permissions() -> io::Result<()> {
+#[tokio::test]
+async fn bind_listener_creates_restricted_parent_and_socket_permissions() -> io::Result<()> {
     let path = temp_socket_path("permissions");
     let parent = path
         .parent()
