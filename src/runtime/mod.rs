@@ -13,8 +13,10 @@ use crate::api::{CallOptions, Error, IpcAddress, RequestContext, ServiceError};
 use crate::codec::{decode_cbor, decode_frame, encode_cbor, encode_frame, CodecError};
 use crate::protocol::{
     ErrorBody, MessageType, RequestEnvelope, ResponseEnvelope, DECODE_ERROR, INTERNAL_ERROR,
-    INVALID_REQUEST, METHOD_NOT_FOUND, PROTOCOL_VERSION,
+    INVALID_REQUEST, METHOD_NOT_FOUND, PROTOCOL_VERSION, TIMEOUT,
 };
+#[cfg(windows)]
+use tokio::net::windows::named_pipe::NamedPipeClient;
 #[cfg(windows)]
 use crate::transport::windows_named_pipe::{create_server, open_client};
 #[cfg(windows)]
@@ -141,15 +143,26 @@ impl ServerRuntime {
 
 #[derive(Clone)]
 pub struct ClientRuntime {
-    _addr: IpcAddress,
-    gate: Arc<Mutex<()>>,
+    addr: IpcAddress,
+    state: Arc<Mutex<ClientState>>,
+}
+
+#[cfg(windows)]
+enum ClientState {
+    Disconnected,
+    Connected(NamedPipeClient),
+}
+
+#[cfg(not(windows))]
+enum ClientState {
+    Unsupported,
 }
 
 impl ClientRuntime {
     pub fn new(addr: IpcAddress) -> Self {
         Self {
-            _addr: addr,
-            gate: Arc::new(Mutex::new(())),
+            addr,
+            state: Arc::new(Mutex::new(client_state_default())),
         }
     }
 
@@ -163,22 +176,23 @@ impl ClientRuntime {
         Req: Serialize,
         Resp: DeserializeOwned,
     {
-        let _guard = self.gate.lock().await;
+        let timeout = options.timeout;
         let frame = self.build_request_frame(method, &request, options)?;
+        let mut state = self.state.lock().await;
 
         #[cfg(windows)]
         {
-            let path = self._addr.normalize();
-            let mut client = open_named_pipe_client_with_retry(&path).await?;
-            write_frame_io(&mut client, &frame)
-                .await
-                .map_err(io_error_to_local)?;
-            let response = read_frame_io(&mut client).await.map_err(io_error_to_local)?;
-            return self.decode_response_frame(&response);
+            let result = execute_windows_call(&self.addr, &mut state, &frame, timeout).await;
+            match result {
+                Ok(response) => return self.decode_response_frame(&response),
+                Err(Error::Timeout) => return Err(Error::Timeout),
+                Err(err) => return Err(err),
+            }
         }
 
         #[cfg(not(windows))]
         {
+            let _ = &mut state;
             let _ = frame;
             Err(Error::ConnectFailed {
                 message: "transport not implemented for this platform".into(),
@@ -258,6 +272,11 @@ fn deadline_from_now(timeout: Duration) -> Option<u64> {
     Some(deadline.as_millis() as u64)
 }
 
+fn now_epoch_ms() -> Option<u64> {
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?;
+    Some(now.as_millis() as u64)
+}
+
 fn codec_error_to_protocol(err: CodecError) -> Error {
     Error::Protocol {
         code: INVALID_REQUEST.into(),
@@ -274,6 +293,71 @@ fn codec_error_to_encode(err: CodecError) -> Error {
 fn io_error_to_local(err: std::io::Error) -> Error {
     Error::Io {
         message: err.to_string(),
+    }
+}
+
+fn client_state_default() -> ClientState {
+    #[cfg(windows)]
+    {
+        ClientState::Disconnected
+    }
+
+    #[cfg(not(windows))]
+    {
+        ClientState::Unsupported
+    }
+}
+
+#[cfg(windows)]
+async fn execute_windows_call(
+    addr: &IpcAddress,
+    state: &mut ClientState,
+    frame: &[u8],
+    timeout: Option<Duration>,
+) -> Result<Vec<u8>, Error> {
+    let client = ensure_connected_client(addr, state).await?;
+    let operation = async {
+        write_frame_io(client, frame).await.map_err(io_error_to_local)?;
+        read_frame_io(client).await.map_err(io_error_to_local)
+    };
+
+    match timeout {
+        Some(timeout) => match tokio::time::timeout(timeout, operation).await {
+            Ok(result) => {
+                if result.is_err() {
+                    *state = ClientState::Disconnected;
+                }
+                result
+            }
+            Err(_) => {
+                *state = ClientState::Disconnected;
+                Err(Error::Timeout)
+            }
+        },
+        None => {
+            let result = operation.await;
+            if result.is_err() {
+                *state = ClientState::Disconnected;
+            }
+            result
+        }
+    }
+}
+
+#[cfg(windows)]
+async fn ensure_connected_client<'a>(
+    addr: &IpcAddress,
+    state: &'a mut ClientState,
+) -> Result<&'a mut NamedPipeClient, Error> {
+    if matches!(state, ClientState::Disconnected) {
+        let path = addr.normalize();
+        let client = open_named_pipe_client_with_retry(&path).await?;
+        *state = ClientState::Connected(client);
+    }
+
+    match state {
+        ClientState::Connected(client) => Ok(client),
+        ClientState::Disconnected => Err(Error::ConnectionClosed),
     }
 }
 
@@ -344,6 +428,27 @@ async fn handle_frame_with_handlers(
         trace_id: request.trace_id.clone(),
         deadline_ms: request.deadline_ms,
     };
+
+    if request
+        .deadline_ms
+        .is_some_and(|deadline_ms| now_epoch_ms().is_some_and(|now| now >= deadline_ms))
+    {
+        let response = ResponseEnvelope {
+            version: PROTOCOL_VERSION,
+            message_type: MessageType::Response,
+            request_id: request.request_id,
+            ok: false,
+            payload: None,
+            error: Some(ErrorBody {
+                code: TIMEOUT.into(),
+                message: "request deadline has expired".into(),
+                details: None,
+            }),
+            trace_id: request.trace_id,
+            metadata: None,
+        };
+        return encode_response_frame(&response);
+    }
 
     let response = match handlers.get(&request.method) {
         Some(handler) => match handler.call(ctx, &request.payload).await {
@@ -575,6 +680,47 @@ mod tests {
             Error::Remote {
                 code: "internal_error".into(),
                 message: "boom".into(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn expired_deadline_returns_remote_timeout() {
+        let client = ClientRuntime::new(IpcAddress::NamedPipe("demo".into()));
+        let mut server = ServerRuntime::new(IpcAddress::NamedPipe("demo".into()));
+        server
+            .register("ping", RegisteredHandler::new(|_ctx, req: PingRequest| async move {
+                Ok(PingResponse { value: req.value })
+            }))
+            .expect("register should succeed");
+
+        let request = client
+            .build_request_frame(
+                "ping",
+                &PingRequest {
+                    value: "hello".into(),
+                },
+                CallOptions {
+                    timeout: Some(Duration::ZERO),
+                    trace_id: None,
+                },
+            )
+            .expect("request should encode");
+
+        let response = server
+            .handle_frame(&request)
+            .await
+            .expect("server should respond");
+
+        let err = client
+            .decode_response_frame::<PingResponse>(&response)
+            .expect_err("client should see remote timeout");
+
+        assert_eq!(
+            err,
+            Error::Remote {
+                code: "timeout".into(),
+                message: "request deadline has expired".into(),
             }
         );
     }

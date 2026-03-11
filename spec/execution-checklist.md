@@ -21,16 +21,16 @@
 
 ### 3.1 技术选型
 
-- [ ] 状态：`TODO` 选定异步运行时。
-  证据：
-- [ ] 状态：`TODO` 选定 CBOR 编解码库。
-  证据：
-- [ ] 状态：`TODO` 选定错误处理方案。
-  证据：
-- [ ] 状态：`TODO` 选定日志 / tracing 方案。
-  证据：
-- [ ] 状态：`TODO` 输出候选方案对比表，并写明采用 / 不采用原因。
-  证据：
+- [x] 状态：`DONE` 选定异步运行时。
+  证据：[spec/tech-research-checklist.md](D:\alice\tako\spec\tech-research-checklist.md)，[Cargo.toml](D:\alice\tako\Cargo.toml)
+- [x] 状态：`DONE` 选定 CBOR 编解码库。
+  证据：[spec/tech-research-checklist.md](D:\alice\tako\spec\tech-research-checklist.md)，[Cargo.toml](D:\alice\tako\Cargo.toml)
+- [x] 状态：`DONE` 选定错误处理方案。
+  证据：[spec/tech-research-checklist.md](D:\alice\tako\spec\tech-research-checklist.md)，[Cargo.toml](D:\alice\tako\Cargo.toml)
+- [x] 状态：`DONE` 选定日志 / tracing 方案。
+  证据：[spec/tech-research-checklist.md](D:\alice\tako\spec\tech-research-checklist.md)，[Cargo.toml](D:\alice\tako\Cargo.toml)
+- [x] 状态：`DONE` 输出候选方案对比表，并写明采用 / 不采用原因。
+  证据：[spec/tech-research-checklist.md](D:\alice\tako\spec\tech-research-checklist.md)
 
 ### 3.2 平台与验证资源
 
@@ -56,40 +56,40 @@
 
 ### 4.1 API 与协议冻结
 
-- [ ] 状态：`TODO` `trace_id` 缺省生成策略已写成明确决议。
-  证据：
-- [ ] 状态：`TODO` Windows Named Pipe 地址规范化规则已冻结。
-  证据：
-- [ ] 状态：`TODO` `Server::register` 最终签名已冻结为 `&mut self -> &mut Self`。
-  证据：
-- [ ] 状态：`TODO` handler 类型擦除边界已冻结为“原始 CBOR payload bytes -> 编码后响应 bytes / ServiceError”。
-  证据：
-- [ ] 状态：`TODO` 客户端超时后惰性重连语义已冻结。
-  证据：
-- [ ] 状态：`TODO` 服务端停服接口已冻结为 `serve_until(shutdown)`。
-  证据：
-- [ ] 状态：`TODO` Unix Domain Socket 默认权限策略已冻结。
-  证据：
-- [ ] 状态：`TODO` Windows Named Pipe 默认安全策略已冻结。
-  证据：
+- [x] 状态：`DONE` `trace_id` 缺省生成策略已写成明确决议。
+  证据：[spec/api-sketch.md](D:\alice\tako\spec\api-sketch.md)，[spec/plan.md](D:\alice\tako\spec\plan.md)，[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)
+- [x] 状态：`DONE` Windows Named Pipe 地址规范化规则已冻结。
+  证据：[spec/api-sketch.md](D:\alice\tako\spec\api-sketch.md)，[src/api/mod.rs](D:\alice\tako\src\api\mod.rs)，[tests/api_tests.rs](D:\alice\tako\tests\api_tests.rs)
+- [x] 状态：`DONE` `Server::register` 最终签名已冻结为 `&mut self -> &mut Self`。
+  证据：[spec/api-sketch.md](D:\alice\tako\spec\api-sketch.md)，[src/api/mod.rs](D:\alice\tako\src\api\mod.rs)
+- [x] 状态：`DONE` handler 类型擦除边界已冻结为“原始 CBOR payload bytes -> 编码后响应 bytes / ServiceError”。
+  证据：[spec/api-sketch.md](D:\alice\tako\spec\api-sketch.md)，[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)
+- [x] 状态：`DONE` 客户端超时后惰性重连语义已冻结。
+  证据：[spec/api-sketch.md](D:\alice\tako\spec\api-sketch.md)，[spec/protocol-draft.md](D:\alice\tako\spec\protocol-draft.md)，[spec/plan.md](D:\alice\tako\spec\plan.md)
+- [x] 状态：`DONE` 服务端停服接口已冻结为 `serve_until(shutdown)`。
+  证据：[spec/api-sketch.md](D:\alice\tako\spec\api-sketch.md)，[src/api/mod.rs](D:\alice\tako\src\api\mod.rs)
+- [x] 状态：`DONE` Unix Domain Socket 默认权限策略已冻结。
+  证据：[spec/api-sketch.md](D:\alice\tako\spec\api-sketch.md)，[spec/plan.md](D:\alice\tako\spec\plan.md)
+- [x] 状态：`DONE` Windows Named Pipe 默认安全策略已冻结。
+  证据：[spec/api-sketch.md](D:\alice\tako\spec\api-sketch.md)，[spec/plan.md](D:\alice\tako\spec\plan.md)
 
 ### 4.2 文档一致性
 
-- [ ] 状态：`TODO` `plan.md`、`protocol-draft.md`、`api-sketch.md` 不再保留未决项。
-  证据：
-- [ ] 状态：`TODO` 错误映射规则在三份文档中一致。
-  证据：
-- [ ] 状态：`TODO` 地址抽象与安全策略在三份文档中一致。
-  证据：
-- [ ] 状态：`TODO` 阶段 2 出口与最终验收已覆盖最小测试矩阵。
-  证据：
+- [x] 状态：`DONE` `plan.md`、`protocol-draft.md`、`api-sketch.md` 不再保留未决项。
+  证据：[spec/plan.md](D:\alice\tako\spec\plan.md)，[spec/protocol-draft.md](D:\alice\tako\spec\protocol-draft.md)，[spec/api-sketch.md](D:\alice\tako\spec\api-sketch.md)
+- [x] 状态：`DONE` 错误映射规则在三份文档中一致。
+  证据：[spec/plan.md](D:\alice\tako\spec\plan.md)，[spec/protocol-draft.md](D:\alice\tako\spec\protocol-draft.md)，[spec/api-sketch.md](D:\alice\tako\spec\api-sketch.md)
+- [x] 状态：`DONE` 地址抽象与安全策略在三份文档中一致。
+  证据：[spec/plan.md](D:\alice\tako\spec\plan.md)，[spec/protocol-draft.md](D:\alice\tako\spec\protocol-draft.md)，[spec/api-sketch.md](D:\alice\tako\spec\api-sketch.md)
+- [x] 状态：`DONE` 阶段 2 出口与最终验收已覆盖最小测试矩阵。
+  证据：[spec/plan.md](D:\alice\tako\spec\plan.md)，[spec/protocol-draft.md](D:\alice\tako\spec\protocol-draft.md)，[spec/api-sketch.md](D:\alice\tako\spec\api-sketch.md)
 
 ### 4.3 示例与测试设计
 
-- [ ] 状态：`TODO` 完成 Hello World 成功调用示例。
-  证据：
-- [ ] 状态：`TODO` 完成失败调用与错误分支处理示例。
-  证据：
+- [x] 状态：`DONE` 完成 Hello World 成功调用示例。
+  证据：[spec/api-sketch.md](D:\alice\tako\spec\api-sketch.md)
+- [x] 状态：`DONE` 完成失败调用与错误分支处理示例。
+  证据：[spec/api-sketch.md](D:\alice\tako\spec\api-sketch.md)
 - [ ] 状态：`TODO` 将最小测试矩阵转成测试设计清单。
   证据：
 - [ ] 状态：`TODO` 标明每条测试是单元测试、集成测试还是跨平台验证。
@@ -108,50 +108,50 @@
 
 ### 5.1 子阶段 A：项目骨架与协议类型
 
-- [ ] 状态：`TODO` 建立 crate 基础目录结构。
-  证据：
-- [ ] 状态：`TODO` 落地请求/响应信封与错误体。
-  证据：
-- [ ] 状态：`TODO` 落地版本常量与地址抽象。
-  证据：
-- [ ] 状态：`TODO` 完成协议类型级单元测试。
-  证据：
+- [x] 状态：`DONE` 建立 crate 基础目录结构。
+  证据：[src/lib.rs](D:\alice\tako\src\lib.rs)，[src/api/mod.rs](D:\alice\tako\src\api\mod.rs)，[src/protocol/mod.rs](D:\alice\tako\src\protocol\mod.rs)，[src/codec/mod.rs](D:\alice\tako\src\codec\mod.rs)，[src/transport/mod.rs](D:\alice\tako\src\transport\mod.rs)，[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)，[src/observability/mod.rs](D:\alice\tako\src\observability\mod.rs)
+- [x] 状态：`DONE` 落地请求/响应信封与错误体。
+  证据：[src/protocol/mod.rs](D:\alice\tako\src\protocol\mod.rs)
+- [x] 状态：`DONE` 落地版本常量与地址抽象。
+  证据：[src/protocol/mod.rs](D:\alice\tako\src\protocol\mod.rs)，[src/api/mod.rs](D:\alice\tako\src\api\mod.rs)
+- [x] 状态：`DONE` 完成协议类型级单元测试。
+  证据：[tests/protocol_tests.rs](D:\alice\tako\tests\protocol_tests.rs)
 
 ### 5.2 子阶段 B：codec 与状态机
 
-- [ ] 状态：`TODO` 实现长度前缀分帧。
-  证据：
-- [ ] 状态：`TODO` 实现最大帧大小校验。
-  证据：
-- [ ] 状态：`TODO` 实现 CBOR 编解码与 payload bytes 适配。
-  证据：
-- [ ] 状态：`TODO` 实现非法长度处理路径。
-  证据：
-- [ ] 状态：`TODO` 实现超大帧处理路径。
-  证据：
-- [ ] 状态：`TODO` 实现非法 CBOR 处理路径。
-  证据：
+- [x] 状态：`DONE` 实现长度前缀分帧。
+  证据：[src/codec/mod.rs](D:\alice\tako\src\codec\mod.rs)，[tests/codec_tests.rs](D:\alice\tako\tests\codec_tests.rs)
+- [x] 状态：`DONE` 实现最大帧大小校验。
+  证据：[src/codec/mod.rs](D:\alice\tako\src\codec\mod.rs)，[tests/codec_tests.rs](D:\alice\tako\tests\codec_tests.rs)
+- [x] 状态：`DONE` 实现 CBOR 编解码与 payload bytes 适配。
+  证据：[src/codec/mod.rs](D:\alice\tako\src\codec\mod.rs)，[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)
+- [x] 状态：`DONE` 实现非法长度处理路径。
+  证据：[src/codec/mod.rs](D:\alice\tako\src\codec\mod.rs)，[tests/codec_tests.rs](D:\alice\tako\tests\codec_tests.rs)
+- [x] 状态：`DONE` 实现超大帧处理路径。
+  证据：[src/codec/mod.rs](D:\alice\tako\src\codec\mod.rs)，[tests/codec_tests.rs](D:\alice\tako\tests\codec_tests.rs)
+- [x] 状态：`DONE` 实现非法 CBOR 处理路径。
+  证据：[src/codec/mod.rs](D:\alice\tako\src\codec\mod.rs)，[tests/codec_tests.rs](D:\alice\tako\tests\codec_tests.rs)
 - [ ] 状态：`TODO` 实现缺少必填字段处理路径。
   证据：
-- [ ] 状态：`TODO` 实现版本不兼容处理路径。
-  证据：
+- [x] 状态：`DONE` 实现版本不兼容处理路径。
+  证据：[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)
 - [ ] 状态：`TODO` 实现客户端超时后连接失效与惰性重连状态机。
   证据：
 
 ### 5.3 子阶段 C：主开发平台传输与最小链路
 
-- [ ] 状态：`TODO` 实现主开发平台 listener / accept / read / write。
-  证据：
+- [x] 状态：`DONE` 实现主开发平台 listener / accept / read / write。
+  证据：[src/transport/windows_named_pipe.rs](D:\alice\tako\src\transport\windows_named_pipe.rs)，[src/transport/mod.rs](D:\alice\tako\src\transport\mod.rs)，[tests/transport_windows_tests.rs](D:\alice\tako\tests\transport_windows_tests.rs)
 - [ ] 状态：`TODO` 打通 `Client::connect -> call -> Server::register -> serve_until` 成功链路。
   证据：
-- [ ] 状态：`TODO` 实现方法不存在返回路径。
-  证据：
-- [ ] 状态：`TODO` 实现服务端业务解码失败返回路径。
-  证据：
-- [ ] 状态：`TODO` 实现服务端内部错误返回路径。
-  证据：
-- [ ] 状态：`TODO` 实现过期 `deadline_ms` 返回路径。
-  证据：
+- [x] 状态：`DONE` 实现方法不存在返回路径。
+  证据：[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)，[tests/api_windows_e2e_tests.rs](D:\alice\tako\tests\api_windows_e2e_tests.rs)
+- [x] 状态：`DONE` 实现服务端业务解码失败返回路径。
+  证据：[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)，[tests/api_windows_e2e_tests.rs](D:\alice\tako\tests\api_windows_e2e_tests.rs)
+- [x] 状态：`DONE` 实现服务端内部错误返回路径。
+  证据：[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)
+- [x] 状态：`DONE` 实现过期 `deadline_ms` 返回路径。
+  证据：[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)，[tests/api_windows_e2e_tests.rs](D:\alice\tako\tests\api_windows_e2e_tests.rs)
 - [ ] 状态：`TODO` 落地 Unix Domain Socket 默认权限策略。
   证据：
 - [ ] 状态：`TODO` 落地 Windows Named Pipe 默认安全策略。
@@ -163,26 +163,26 @@
   证据：
 - [ ] 状态：`TODO` 方法不存在自动化测试通过。
   证据：
-- [ ] 状态：`TODO` 非法长度自动化测试通过。
-  证据：
-- [ ] 状态：`TODO` 超大帧自动化测试通过。
-  证据：
-- [ ] 状态：`TODO` 非法 CBOR 自动化测试通过。
-  证据：
+- [x] 状态：`DONE` 非法长度自动化测试通过。
+  证据：[tests/codec_tests.rs](D:\alice\tako\tests\codec_tests.rs)，`cargo test`
+- [x] 状态：`DONE` 超大帧自动化测试通过。
+  证据：[tests/codec_tests.rs](D:\alice\tako\tests\codec_tests.rs)，`cargo test`
+- [x] 状态：`DONE` 非法 CBOR 自动化测试通过。
+  证据：[tests/codec_tests.rs](D:\alice\tako\tests\codec_tests.rs)，`cargo test`
 - [ ] 状态：`TODO` 缺少必填字段自动化测试通过。
   证据：
-- [ ] 状态：`TODO` 服务端业务解码失败自动化测试通过。
-  证据：
+- [x] 状态：`DONE` 服务端业务解码失败自动化测试通过。
+  证据：[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)，`cargo test`
 - [ ] 状态：`TODO` 客户端超时自动化测试通过。
   证据：
-- [ ] 状态：`TODO` `deadline_ms` 过期拒绝自动化测试通过。
-  证据：
+- [x] 状态：`DONE` `deadline_ms` 过期拒绝自动化测试通过。
+  证据：[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)，`cargo test`
 - [ ] 状态：`TODO` 本地超时后新连接继续自动化测试通过。
   证据：
-- [ ] 状态：`TODO` `version != 1` 自动化测试通过。
-  证据：
-- [ ] 状态：`TODO` 服务端内部错误自动化测试通过。
-  证据：
+- [x] 状态：`DONE` `version != 1` 自动化测试通过。
+  证据：[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)，`cargo test`
+- [x] 状态：`DONE` 服务端内部错误自动化测试通过。
+  证据：[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)，`cargo test`
 - [ ] 状态：`TODO` 关键日志字段可用于排障。
   证据：
 
