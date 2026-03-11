@@ -33,7 +33,9 @@ struct MissingMethodEnvelope {
 }
 
 fn temp_socket_path(label: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("tako-ipc-{label}-{}.sock", Uuid::new_v4()))
+    std::env::temp_dir()
+        .join(format!("tako-ipc-{label}-{}", Uuid::new_v4()))
+        .join("ipc.sock")
 }
 
 async fn spawn_test_server() -> io::Result<(
