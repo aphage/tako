@@ -4,17 +4,24 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::sync::Mutex;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::api::{CallOptions, Error, IpcAddress, RequestContext, ServiceError};
 use crate::codec::{decode_cbor, decode_frame, encode_cbor, encode_frame, CodecError};
+use crate::observability;
 use crate::protocol::{
     ErrorBody, MessageType, RequestEnvelope, ResponseEnvelope, DECODE_ERROR, INTERNAL_ERROR,
     INVALID_REQUEST, METHOD_NOT_FOUND, PROTOCOL_VERSION, TIMEOUT,
 };
+#[cfg(unix)]
+use tokio::net::UnixStream;
+#[cfg(unix)]
+use crate::transport::unix::{bind_listener, cleanup_socket_file, connect_stream};
 #[cfg(windows)]
 use tokio::net::windows::named_pipe::NamedPipeClient;
 #[cfg(windows)]
@@ -26,6 +33,29 @@ type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 type RawHandler = Arc<
     dyn Fn(RequestContext, &[u8]) -> BoxFuture<Result<Vec<u8>, ServiceError>> + Send + Sync + 'static,
 >;
+
+#[derive(Debug, Deserialize)]
+struct LooseRequestEnvelope {
+    version: Option<u16>,
+    message_type: Option<MessageType>,
+    request_id: Option<String>,
+    method: Option<String>,
+    deadline_ms: Option<u64>,
+    trace_id: Option<String>,
+    payload: Option<Vec<u8>>,
+}
+
+enum ParseRequestEnvelopeError {
+    Protocol(Error),
+    Invalid(RequestEnvelope),
+}
+
+struct RequestMeta {
+    request_id: String,
+    method: String,
+    trace_id: Option<String>,
+    deadline_ms: Option<u64>,
+}
 
 #[derive(Clone)]
 pub struct RegisteredHandler {
@@ -95,7 +125,12 @@ impl ServerRuntime {
             return self.serve_windows(shutdown).await;
         }
 
-        #[cfg(not(windows))]
+        #[cfg(unix)]
+        {
+            return self.serve_unix(shutdown).await;
+        }
+
+        #[cfg(not(any(windows, unix)))]
         {
             shutdown.await;
             let _ = self;
@@ -107,7 +142,43 @@ impl ServerRuntime {
 
     #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) async fn handle_frame(&self, frame: &[u8]) -> Result<Vec<u8>, Error> {
-        handle_frame_with_handlers(&self.handlers, frame).await
+        handle_frame_with_handlers(&self.handlers, frame, "test-connection").await
+    }
+}
+
+#[cfg(unix)]
+impl ServerRuntime {
+    async fn serve_unix<S>(self, shutdown: S) -> Result<(), Error>
+    where
+        S: Future<Output = ()> + Send,
+    {
+        let path = match &self._addr {
+            IpcAddress::UnixSocket(path) => path.clone(),
+            _ => {
+                return Err(Error::ConnectFailed {
+                    message: "unix runtime requires unix socket address".into(),
+                })
+            }
+        };
+        let handlers = Arc::new(self.handlers);
+        let listener = bind_listener(&path).map_err(io_error_to_local)?;
+        tokio::pin!(shutdown);
+
+        loop {
+            tokio::select! {
+                _ = &mut shutdown => {
+                    let _ = cleanup_socket_file(&path);
+                    return Ok(());
+                }
+                accepted = listener.accept() => {
+                    let (stream, _) = accepted.map_err(io_error_to_local)?;
+                    let handlers = Arc::clone(&handlers);
+                    tokio::spawn(async move {
+                        let _ = handle_unix_connection(stream, handlers).await;
+                    });
+                }
+            }
+        }
     }
 }
 
@@ -153,7 +224,13 @@ enum ClientState {
     Connected(NamedPipeClient),
 }
 
-#[cfg(not(windows))]
+#[cfg(unix)]
+enum ClientState {
+    Disconnected,
+    Connected(UnixStream),
+}
+
+#[cfg(not(any(windows, unix)))]
 enum ClientState {
     Unsupported,
 }
@@ -178,19 +255,57 @@ impl ClientRuntime {
     {
         let timeout = options.timeout;
         let frame = self.build_request_frame(method, &request, options)?;
+        let meta = decode_request_metadata(&frame)?;
+        log_client_call_start(&meta, platform_name());
         let mut state = self.state.lock().await;
 
         #[cfg(windows)]
         {
             let result = execute_windows_call(&self.addr, &mut state, &frame, timeout).await;
             match result {
-                Ok(response) => return self.decode_response_frame(&response),
-                Err(Error::Timeout) => return Err(Error::Timeout),
-                Err(err) => return Err(err),
+                Ok(response) => {
+                    let decoded = self.decode_response_frame(&response);
+                    match &decoded {
+                        Ok(_) => log_client_call_finish(&meta, None, platform_name()),
+                        Err(err) => log_client_call_finish(&meta, error_code_of(err), platform_name()),
+                    }
+                    return decoded;
+                }
+                Err(Error::Timeout) => {
+                    log_client_call_timeout(&meta, platform_name());
+                    return Err(Error::Timeout);
+                }
+                Err(err) => {
+                    log_client_call_finish(&meta, error_code_of(&err), platform_name());
+                    return Err(err);
+                }
             }
         }
 
-        #[cfg(not(windows))]
+        #[cfg(unix)]
+        {
+            let result = execute_unix_call(&self.addr, &mut state, &frame, timeout).await;
+            match result {
+                Ok(response) => {
+                    let decoded = self.decode_response_frame(&response);
+                    match &decoded {
+                        Ok(_) => log_client_call_finish(&meta, None, platform_name()),
+                        Err(err) => log_client_call_finish(&meta, error_code_of(err), platform_name()),
+                    }
+                    return decoded;
+                }
+                Err(Error::Timeout) => {
+                    log_client_call_timeout(&meta, platform_name());
+                    return Err(Error::Timeout);
+                }
+                Err(err) => {
+                    log_client_call_finish(&meta, error_code_of(&err), platform_name());
+                    return Err(err);
+                }
+            }
+        }
+
+        #[cfg(not(any(windows, unix)))]
         {
             let _ = &mut state;
             let _ = frame;
@@ -302,9 +417,74 @@ fn client_state_default() -> ClientState {
         ClientState::Disconnected
     }
 
-    #[cfg(not(windows))]
+    #[cfg(unix)]
+    {
+        ClientState::Disconnected
+    }
+
+    #[cfg(not(any(windows, unix)))]
     {
         ClientState::Unsupported
+    }
+}
+
+#[cfg(unix)]
+async fn execute_unix_call(
+    addr: &IpcAddress,
+    state: &mut ClientState,
+    frame: &[u8],
+    timeout: Option<Duration>,
+) -> Result<Vec<u8>, Error> {
+    let client = ensure_connected_unix_client(addr, state).await?;
+    let operation = async {
+        write_frame_io(client, frame).await.map_err(io_error_to_local)?;
+        read_frame_io(client).await.map_err(io_error_to_local)
+    };
+
+    match timeout {
+        Some(timeout) => match tokio::time::timeout(timeout, operation).await {
+            Ok(result) => {
+                if result.is_err() {
+                    *state = ClientState::Disconnected;
+                }
+                result
+            }
+            Err(_) => {
+                *state = ClientState::Disconnected;
+                Err(Error::Timeout)
+            }
+        },
+        None => {
+            let result = operation.await;
+            if result.is_err() {
+                *state = ClientState::Disconnected;
+            }
+            result
+        }
+    }
+}
+
+#[cfg(unix)]
+async fn ensure_connected_unix_client<'a>(
+    addr: &IpcAddress,
+    state: &'a mut ClientState,
+) -> Result<&'a mut UnixStream, Error> {
+    if matches!(state, ClientState::Disconnected) {
+        let path = match addr {
+            IpcAddress::UnixSocket(path) => path,
+            _ => {
+                return Err(Error::ConnectFailed {
+                    message: "unix runtime requires unix socket address".into(),
+                })
+            }
+        };
+        let client = connect_stream(path).await.map_err(io_error_to_local)?;
+        *state = ClientState::Connected(client);
+    }
+
+    match state {
+        ClientState::Connected(client) => Ok(client),
+        ClientState::Disconnected => Err(Error::ConnectionClosed),
     }
 }
 
@@ -392,14 +572,47 @@ async fn handle_named_pipe_connection(
     mut connection: tokio::net::windows::named_pipe::NamedPipeServer,
     handlers: Arc<HashMap<String, RegisteredHandler>>,
 ) -> Result<(), Error> {
+    let connection_id = Uuid::new_v4().to_string();
     loop {
         let frame = match read_frame_io(&mut connection).await {
             Ok(frame) => frame,
-            Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
-            Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => return Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => {
+                log_connection_closed(&connection_id, platform_name());
+                return Ok(());
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
+                log_connection_closed(&connection_id, platform_name());
+                return Ok(());
+            }
             Err(err) => return Err(io_error_to_local(err)),
         };
-        let response = handle_frame_with_handlers(&handlers, &frame).await?;
+        let response = handle_frame_with_handlers(&handlers, &frame, &connection_id).await?;
+        write_frame_io(&mut connection, &response)
+            .await
+            .map_err(io_error_to_local)?;
+    }
+}
+
+#[cfg(unix)]
+async fn handle_unix_connection(
+    mut connection: UnixStream,
+    handlers: Arc<HashMap<String, RegisteredHandler>>,
+) -> Result<(), Error> {
+    let connection_id = Uuid::new_v4().to_string();
+    loop {
+        let frame = match read_frame_io(&mut connection).await {
+            Ok(frame) => frame,
+            Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => {
+                log_connection_closed(&connection_id, platform_name());
+                return Ok(());
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
+                log_connection_closed(&connection_id, platform_name());
+                return Ok(());
+            }
+            Err(err) => return Err(io_error_to_local(err)),
+        };
+        let response = handle_frame_with_handlers(&handlers, &frame, &connection_id).await?;
         write_frame_io(&mut connection, &response)
             .await
             .map_err(io_error_to_local)?;
@@ -409,18 +622,19 @@ async fn handle_named_pipe_connection(
 async fn handle_frame_with_handlers(
     handlers: &HashMap<String, RegisteredHandler>,
     frame: &[u8],
+    connection_id: &str,
 ) -> Result<Vec<u8>, Error> {
     let payload = decode_frame(frame).map_err(codec_error_to_protocol)?;
-    let request: RequestEnvelope = decode_cbor(payload).map_err(codec_error_to_protocol)?;
+    let request = match parse_request_envelope(payload) {
+        Ok(request) => request,
+        Err(ParseRequestEnvelopeError::Invalid(request)) => {
+            log_invalid_request(&request, connection_id, platform_name());
+            return invalid_request_response(&request);
+        }
+        Err(ParseRequestEnvelopeError::Protocol(err)) => return Err(err),
+    };
 
-    if request.version != PROTOCOL_VERSION
-        || request.message_type != MessageType::Request
-        || request.request_id.is_empty()
-        || request.method.is_empty()
-        || request.payload.is_empty()
-    {
-        return invalid_request_response(&request);
-    }
+    log_server_request_start(&request, connection_id, platform_name());
 
     let ctx = RequestContext {
         request_id: request.request_id.clone(),
@@ -436,7 +650,7 @@ async fn handle_frame_with_handlers(
         let response = ResponseEnvelope {
             version: PROTOCOL_VERSION,
             message_type: MessageType::Response,
-            request_id: request.request_id,
+            request_id: request.request_id.clone(),
             ok: false,
             payload: None,
             error: Some(ErrorBody {
@@ -444,9 +658,10 @@ async fn handle_frame_with_handlers(
                 message: "request deadline has expired".into(),
                 details: None,
             }),
-            trace_id: request.trace_id,
+            trace_id: request.trace_id.clone(),
             metadata: None,
         };
+        log_server_request_finish(&request, Some(TIMEOUT), connection_id, platform_name());
         return encode_response_frame(&response);
     }
 
@@ -455,17 +670,17 @@ async fn handle_frame_with_handlers(
             Ok(payload) => ResponseEnvelope {
                 version: PROTOCOL_VERSION,
                 message_type: MessageType::Response,
-                request_id: request.request_id,
+                request_id: request.request_id.clone(),
                 ok: true,
                 payload: Some(payload),
                 error: None,
-                trace_id: request.trace_id,
+                trace_id: request.trace_id.clone(),
                 metadata: None,
             },
             Err(err) => ResponseEnvelope {
                 version: PROTOCOL_VERSION,
                 message_type: MessageType::Response,
-                request_id: request.request_id,
+                request_id: request.request_id.clone(),
                 ok: false,
                 payload: None,
                 error: Some(ErrorBody {
@@ -473,14 +688,14 @@ async fn handle_frame_with_handlers(
                     message: err.message,
                     details: None,
                 }),
-                trace_id: request.trace_id,
+                trace_id: request.trace_id.clone(),
                 metadata: None,
             },
         },
         None => ResponseEnvelope {
             version: PROTOCOL_VERSION,
             message_type: MessageType::Response,
-            request_id: request.request_id,
+            request_id: request.request_id.clone(),
             ok: false,
             payload: None,
             error: Some(ErrorBody {
@@ -488,10 +703,16 @@ async fn handle_frame_with_handlers(
                 message: "method not registered".into(),
                 details: None,
             }),
-            trace_id: request.trace_id,
+            trace_id: request.trace_id.clone(),
             metadata: None,
         },
     };
+
+    let response_error_code = response.error.as_ref().map(|error| error.code.as_str());
+    if response_error_code == Some(DECODE_ERROR) {
+        log_server_decode_error(&request, connection_id, platform_name());
+    }
+    log_server_request_finish(&request, response_error_code, connection_id, platform_name());
 
     encode_response_frame(&response)
 }
@@ -514,14 +735,223 @@ fn invalid_request_response(request: &RequestEnvelope) -> Result<Vec<u8>, Error>
     encode_response_frame(&response)
 }
 
+fn parse_request_envelope(
+    payload: &[u8],
+) -> Result<RequestEnvelope, ParseRequestEnvelopeError> {
+    let loose: LooseRequestEnvelope = decode_cbor(payload)
+        .map_err(codec_error_to_protocol)
+        .map_err(ParseRequestEnvelopeError::Protocol)?;
+
+    let request = RequestEnvelope {
+        version: loose.version.unwrap_or(PROTOCOL_VERSION),
+        message_type: loose.message_type.unwrap_or(MessageType::Request),
+        request_id: loose.request_id.unwrap_or_default(),
+        method: loose.method.unwrap_or_default(),
+        deadline_ms: loose.deadline_ms,
+        trace_id: loose.trace_id,
+        payload: loose.payload.unwrap_or_default(),
+        metadata: None,
+    };
+
+    if request.version != PROTOCOL_VERSION
+        || request.message_type != MessageType::Request
+        || request.request_id.is_empty()
+        || request.method.is_empty()
+        || request.payload.is_empty()
+    {
+        return Err(ParseRequestEnvelopeError::Invalid(request));
+    }
+
+    Ok(request)
+}
+
+fn decode_request_metadata(frame: &[u8]) -> Result<RequestMeta, Error> {
+    let payload = decode_frame(frame).map_err(codec_error_to_protocol)?;
+    let request: RequestEnvelope = decode_cbor(payload).map_err(codec_error_to_protocol)?;
+    Ok(RequestMeta {
+        request_id: request.request_id,
+        method: request.method,
+        trace_id: request.trace_id,
+        deadline_ms: request.deadline_ms,
+    })
+}
+
+fn error_code_of(error: &Error) -> Option<&str> {
+    match error {
+        Error::Protocol { code, .. } => Some(code.as_str()),
+        Error::Remote { code, .. } => Some(code.as_str()),
+        _ => None,
+    }
+}
+
+fn platform_name() -> &'static str {
+    #[cfg(windows)]
+    {
+        "windows"
+    }
+    #[cfg(unix)]
+    {
+        "unix"
+    }
+    #[cfg(not(any(windows, unix)))]
+    {
+        "unknown"
+    }
+}
+
+fn log_client_call_start(meta: &RequestMeta, platform: &str) {
+    info!(
+        event = observability::CLIENT_CALL_START,
+        request_id = %meta.request_id,
+        trace_id = ?meta.trace_id,
+        method = %meta.method,
+        deadline_ms = ?meta.deadline_ms,
+        platform = %platform,
+    );
+}
+
+fn log_client_call_finish(meta: &RequestMeta, error_code: Option<&str>, platform: &str) {
+    info!(
+        event = observability::CLIENT_CALL_FINISH,
+        request_id = %meta.request_id,
+        trace_id = ?meta.trace_id,
+        method = %meta.method,
+        error_code = ?error_code,
+        platform = %platform,
+    );
+}
+
+fn log_client_call_timeout(meta: &RequestMeta, platform: &str) {
+    warn!(
+        event = observability::CLIENT_CALL_TIMEOUT,
+        request_id = %meta.request_id,
+        trace_id = ?meta.trace_id,
+        method = %meta.method,
+        deadline_ms = ?meta.deadline_ms,
+        platform = %platform,
+    );
+}
+
+fn log_server_request_start(request: &RequestEnvelope, connection_id: &str, platform: &str) {
+    info!(
+        event = observability::SERVER_REQUEST_START,
+        request_id = %request.request_id,
+        trace_id = ?request.trace_id,
+        method = %request.method,
+        deadline_ms = ?request.deadline_ms,
+        connection_id = %connection_id,
+        platform = %platform,
+    );
+}
+
+fn log_server_request_finish(
+    request: &RequestEnvelope,
+    error_code: Option<&str>,
+    connection_id: &str,
+    platform: &str,
+) {
+    info!(
+        event = observability::SERVER_REQUEST_FINISH,
+        request_id = %request.request_id,
+        trace_id = ?request.trace_id,
+        method = %request.method,
+        error_code = ?error_code,
+        connection_id = %connection_id,
+        platform = %platform,
+    );
+}
+
+fn log_server_decode_error(request: &RequestEnvelope, connection_id: &str, platform: &str) {
+    warn!(
+        event = observability::SERVER_REQUEST_DECODE_ERROR,
+        request_id = %request.request_id,
+        trace_id = ?request.trace_id,
+        method = %request.method,
+        connection_id = %connection_id,
+        platform = %platform,
+    );
+}
+
+fn log_invalid_request(request: &RequestEnvelope, connection_id: &str, platform: &str) {
+    warn!(
+        event = observability::PROTOCOL_INVALID_REQUEST,
+        request_id = %request.request_id,
+        trace_id = ?request.trace_id,
+        method = %request.method,
+        connection_id = %connection_id,
+        platform = %platform,
+    );
+}
+
+fn log_connection_closed(connection_id: &str, platform: &str) {
+    info!(
+        event = observability::CONNECTION_CLOSED,
+        connection_id = %connection_id,
+        platform = %platform,
+    );
+}
+
 #[cfg(test)]
 mod tests {
+    use std::io;
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
-    use super::{ClientRuntime, RegisteredHandler, ServerRuntime};
+    use super::{
+        log_client_call_finish, ClientRuntime, RegisteredHandler, RequestMeta, ServerRuntime,
+    };
     use crate::api::{CallOptions, Error, IpcAddress, ServiceError};
     use crate::codec::{decode_cbor, encode_cbor, encode_frame};
+    use crate::observability;
     use crate::protocol::{MessageType, RequestEnvelope, PROTOCOL_VERSION};
+    use tracing::subscriber::with_default;
+    use tracing_subscriber::fmt;
+
+    #[derive(Clone)]
+    struct SharedWriter {
+        buffer: Arc<Mutex<Vec<u8>>>,
+    }
+
+    impl io::Write for SharedWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.buffer
+                .lock()
+                .expect("buffer lock should succeed")
+                .extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn capture_logs<F>(run: F) -> String
+    where
+        F: FnOnce(),
+    {
+        let buffer = Arc::new(Mutex::new(Vec::new()));
+        let subscriber = fmt::Subscriber::builder()
+            .with_ansi(false)
+            .without_time()
+            .with_writer({
+                let buffer = Arc::clone(&buffer);
+                move || SharedWriter {
+                    buffer: Arc::clone(&buffer),
+                }
+            })
+            .finish();
+
+        with_default(subscriber, run);
+
+        String::from_utf8(
+            buffer
+                .lock()
+                .expect("buffer lock should succeed")
+                .clone(),
+        )
+        .expect("logs should be utf-8")
+    }
 
     #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
     struct PingRequest {
@@ -744,5 +1174,69 @@ mod tests {
         assert_eq!(request.version, PROTOCOL_VERSION);
         assert!(request.trace_id.is_some());
         assert!(!request.request_id.is_empty());
+    }
+
+    #[test]
+    fn server_observability_logs_request_lifecycle() {
+        let logs = capture_logs(|| {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("runtime should build");
+
+            runtime.block_on(async {
+                let client = ClientRuntime::new(IpcAddress::NamedPipe("demo".into()));
+                let mut server = ServerRuntime::new(IpcAddress::NamedPipe("demo".into()));
+                server
+                    .register("ping", RegisteredHandler::new(|_ctx, req: PingRequest| async move {
+                        Ok(PingResponse { value: req.value })
+                    }))
+                    .expect("register should succeed");
+
+                let request = client
+                    .build_request_frame(
+                        "ping",
+                        &PingRequest {
+                            value: "hello".into(),
+                        },
+                        CallOptions {
+                            timeout: Some(Duration::from_secs(1)),
+                            trace_id: Some("trace-test".into()),
+                        },
+                    )
+                    .expect("request should encode");
+
+                let _ = server
+                    .handle_frame(&request)
+                    .await
+                    .expect("server should respond");
+            });
+        });
+
+        assert!(logs.contains(observability::SERVER_REQUEST_START));
+        assert!(logs.contains(observability::SERVER_REQUEST_FINISH));
+        assert!(logs.contains("request_id="));
+        assert!(logs.contains("method=ping"));
+        assert!(logs.contains("trace_id=Some(\"trace-test\")"));
+    }
+
+    #[test]
+    fn client_observability_logs_error_code() {
+        let meta = RequestMeta {
+            request_id: "req-1".into(),
+            method: "ping".into(),
+            trace_id: Some("trace-1".into()),
+            deadline_ms: Some(42),
+        };
+
+        let logs = capture_logs(|| {
+            log_client_call_finish(&meta, Some("timeout"), "windows");
+        });
+
+        assert!(logs.contains(observability::CLIENT_CALL_FINISH));
+        assert!(logs.contains("request_id=req-1"));
+        assert!(logs.contains("method=ping"));
+        assert!(logs.contains("error_code=Some(\"timeout\")"));
+        assert!(logs.contains("platform=windows"));
     }
 }

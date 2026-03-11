@@ -466,6 +466,8 @@ MVP 建议至少冻结以下线协议错误码：
 - 至少一个非主平台完成真实链路验证；若未完成，则阶段 2 不达标，M4/M5 不得宣称跨平台 MVP 已达成。
 - 已确认客户端超时后连接失效策略、协议错误断连策略和 `deadline_ms` 编码规则在实现与文档中一致。
 - 已确认 Unix Domain Socket 默认权限策略和 Windows Named Pipe 默认安全策略在实现与文档中一致。
+  - Unix 当前实现：父目录 `0700`，socket 文件 `0600`，并在绑定前清理旧 socket 文件。
+  - Windows 当前实现：默认启用 `first_pipe_instance` 保护，并拒绝 remote clients；“仅当前用户可访问”的安全描述符仍作为后续增强项。
 
 预计周期：
 

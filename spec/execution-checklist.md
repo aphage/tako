@@ -131,8 +131,8 @@
   证据：[src/codec/mod.rs](D:\alice\tako\src\codec\mod.rs)，[tests/codec_tests.rs](D:\alice\tako\tests\codec_tests.rs)
 - [x] 状态：`DONE` 实现非法 CBOR 处理路径。
   证据：[src/codec/mod.rs](D:\alice\tako\src\codec\mod.rs)，[tests/codec_tests.rs](D:\alice\tako\tests\codec_tests.rs)
-- [ ] 状态：`TODO` 实现缺少必填字段处理路径。
-  证据：
+- [x] 状态：`DONE` 实现缺少必填字段处理路径。
+  证据：[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)，[tests/api_windows_e2e_tests.rs](D:\alice\tako\tests\api_windows_e2e_tests.rs)，[tests/api_unix_e2e_tests.rs](D:\alice\tako\tests\api_unix_e2e_tests.rs)
 - [x] 状态：`DONE` 实现版本不兼容处理路径。
   证据：[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)
 - [ ] 状态：`TODO` 实现客户端超时后连接失效与惰性重连状态机。
@@ -142,8 +142,8 @@
 
 - [x] 状态：`DONE` 实现主开发平台 listener / accept / read / write。
   证据：[src/transport/windows_named_pipe.rs](D:\alice\tako\src\transport\windows_named_pipe.rs)，[src/transport/mod.rs](D:\alice\tako\src\transport\mod.rs)，[tests/transport_windows_tests.rs](D:\alice\tako\tests\transport_windows_tests.rs)
-- [ ] 状态：`TODO` 打通 `Client::connect -> call -> Server::register -> serve_until` 成功链路。
-  证据：
+- [x] 状态：`DONE` 打通 `Client::connect -> call -> Server::register -> serve_until` 成功链路。
+  证据：[tests/api_windows_e2e_tests.rs](D:\alice\tako\tests\api_windows_e2e_tests.rs)，[tests/api_unix_e2e_tests.rs](D:\alice\tako\tests\api_unix_e2e_tests.rs)，`cargo test`
 - [x] 状态：`DONE` 实现方法不存在返回路径。
   证据：[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)，[tests/api_windows_e2e_tests.rs](D:\alice\tako\tests\api_windows_e2e_tests.rs)
 - [x] 状态：`DONE` 实现服务端业务解码失败返回路径。
@@ -152,33 +152,33 @@
   证据：[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)
 - [x] 状态：`DONE` 实现过期 `deadline_ms` 返回路径。
   证据：[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)，[tests/api_windows_e2e_tests.rs](D:\alice\tako\tests\api_windows_e2e_tests.rs)
-- [ ] 状态：`TODO` 落地 Unix Domain Socket 默认权限策略。
-  证据：
-- [ ] 状态：`TODO` 落地 Windows Named Pipe 默认安全策略。
-  证据：
+- [x] 状态：`DONE` 落地 Unix Domain Socket 默认权限策略。
+  证据：[src/transport/unix.rs](D:\alice\tako\src\transport\unix.rs)，[tests/transport_unix_tests.rs](D:\alice\tako\tests\transport_unix_tests.rs)，`cargo test`
+- [x] 状态：`DONE` 落地 Windows Named Pipe 默认安全策略。
+  证据：[src/transport/windows_named_pipe.rs](D:\alice\tako\src\transport\windows_named_pipe.rs)，`cargo test`
 
 ### 5.4 子阶段 D：自动化测试与稳定性基线
 
-- [ ] 状态：`TODO` 成功调用自动化测试通过。
-  证据：
-- [ ] 状态：`TODO` 方法不存在自动化测试通过。
-  证据：
+- [x] 状态：`DONE` 成功调用自动化测试通过。
+  证据：[tests/api_windows_e2e_tests.rs](D:\alice\tako\tests\api_windows_e2e_tests.rs)，[tests/api_unix_e2e_tests.rs](D:\alice\tako\tests\api_unix_e2e_tests.rs)，`cargo test`
+- [x] 状态：`DONE` 方法不存在自动化测试通过。
+  证据：[tests/api_windows_e2e_tests.rs](D:\alice\tako\tests\api_windows_e2e_tests.rs)，[tests/api_unix_e2e_tests.rs](D:\alice\tako\tests\api_unix_e2e_tests.rs)，`cargo test`
 - [x] 状态：`DONE` 非法长度自动化测试通过。
   证据：[tests/codec_tests.rs](D:\alice\tako\tests\codec_tests.rs)，`cargo test`
 - [x] 状态：`DONE` 超大帧自动化测试通过。
   证据：[tests/codec_tests.rs](D:\alice\tako\tests\codec_tests.rs)，`cargo test`
 - [x] 状态：`DONE` 非法 CBOR 自动化测试通过。
   证据：[tests/codec_tests.rs](D:\alice\tako\tests\codec_tests.rs)，`cargo test`
-- [ ] 状态：`TODO` 缺少必填字段自动化测试通过。
-  证据：
+- [x] 状态：`DONE` 缺少必填字段自动化测试通过。
+  证据：[tests/api_windows_e2e_tests.rs](D:\alice\tako\tests\api_windows_e2e_tests.rs)，[tests/api_unix_e2e_tests.rs](D:\alice\tako\tests\api_unix_e2e_tests.rs)，`cargo test`
 - [x] 状态：`DONE` 服务端业务解码失败自动化测试通过。
   证据：[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)，`cargo test`
-- [ ] 状态：`TODO` 客户端超时自动化测试通过。
-  证据：
 - [x] 状态：`DONE` `deadline_ms` 过期拒绝自动化测试通过。
   证据：[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)，`cargo test`
-- [ ] 状态：`TODO` 本地超时后新连接继续自动化测试通过。
-  证据：
+- [x] 状态：`DONE` 客户端超时自动化测试通过。
+  证据：[tests/api_windows_e2e_tests.rs](D:\alice\tako\tests\api_windows_e2e_tests.rs)，[tests/api_unix_e2e_tests.rs](D:\alice\tako\tests\api_unix_e2e_tests.rs)，`cargo test`
+- [x] 状态：`DONE` 本地超时后新连接继续自动化测试通过。
+  证据：[tests/api_windows_e2e_tests.rs](D:\alice\tako\tests\api_windows_e2e_tests.rs)，[tests/api_unix_e2e_tests.rs](D:\alice\tako\tests\api_unix_e2e_tests.rs)，`cargo test`
 - [x] 状态：`DONE` `version != 1` 自动化测试通过。
   证据：[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)，`cargo test`
 - [x] 状态：`DONE` 服务端内部错误自动化测试通过。
@@ -197,14 +197,14 @@
 
 ### 5.6 阶段 2 出口检查
 
-- [ ] 状态：`TODO` 协议草案最小测试矩阵关键项已自动化覆盖。
-  证据：
+- [x] 状态：`DONE` 协议草案最小测试矩阵关键项已自动化覆盖。
+  证据：[tests/api_windows_e2e_tests.rs](D:\alice\tako\tests\api_windows_e2e_tests.rs)，[tests/api_unix_e2e_tests.rs](D:\alice\tako\tests\api_unix_e2e_tests.rs)，[tests/codec_tests.rs](D:\alice\tako\tests\codec_tests.rs)，[tests/protocol_tests.rs](D:\alice\tako\tests\protocol_tests.rs)，`cargo test`
 - [ ] 状态：`TODO` 至少一个非主平台完成真实链路验证。
   证据：
-- [ ] 状态：`TODO` 超时、断连、错误映射、`deadline_ms` 规则与文档一致。
-  证据：
-- [ ] 状态：`TODO` 默认安全策略在实现与文档中一致。
-  证据：
+- [x] 状态：`DONE` 超时、断连、错误映射、`deadline_ms` 规则与文档一致。
+  证据：[spec/plan.md](D:\alice\tako\spec\plan.md)，[spec/protocol-draft.md](D:\alice\tako\spec\protocol-draft.md)，[spec/api-sketch.md](D:\alice\tako\spec\api-sketch.md)，[src/runtime/mod.rs](D:\alice\tako\src\runtime\mod.rs)，`cargo test`
+- [x] 状态：`DONE` 默认安全策略在实现与文档中一致。
+  证据：[spec/plan.md](D:\alice\tako\spec\plan.md)，[spec/api-sketch.md](D:\alice\tako\spec\api-sketch.md)，[src/transport/unix.rs](D:\alice\tako\src\transport\unix.rs)，[src/transport/windows_named_pipe.rs](D:\alice\tako\src\transport\windows_named_pipe.rs)，`cargo test`
 
 ## 6. 阶段 3 清单
 

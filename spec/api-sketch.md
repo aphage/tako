@@ -38,6 +38,7 @@ pub enum IpcAddress {
 - `api` 层直接接收 `IpcAddress`，不暴露底层传输实现类型。
 - `IpcAddress::NamedPipe(String)` 固定承载逻辑名称而不是完整系统路径；运行时统一规范化为 `\\.\pipe\<name>`。
 - Unix Domain Socket 路径必须位于调用方显式指定或库默认创建的受控目录下；MVP 默认采用最小权限创建目录和 socket 文件。
+- Unix 当前实现会把父目录权限收敛到 `0700`，把 socket 文件权限收敛到 `0600`。
 
 ## 5. Server API 草图
 

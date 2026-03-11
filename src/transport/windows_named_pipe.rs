@@ -6,7 +6,9 @@ use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient, NamedPipeS
 
 pub fn create_server(path: &str, first_instance: bool) -> io::Result<NamedPipeServer> {
     let mut options = ServerOptions::new();
-    options.first_pipe_instance(first_instance);
+    options
+        .first_pipe_instance(first_instance)
+        .reject_remote_clients(true);
     options.create(path)
 }
 
