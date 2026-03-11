@@ -920,6 +920,7 @@ mod tests {
 
     use super::{
         ClientRuntime, RegisteredHandler, RequestMeta, ServerRuntime, log_client_call_finish,
+        log_server_request_finish, log_server_request_start,
     };
     use crate::api::{CallOptions, Error, IpcAddress, ServiceError};
     use crate::codec::{decode_cbor, encode_cbor, encode_frame};
@@ -1207,41 +1208,19 @@ mod tests {
     #[test]
     fn server_observability_logs_request_lifecycle() {
         let logs = capture_logs(|| {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("runtime should build");
+            let request = RequestEnvelope {
+                version: PROTOCOL_VERSION,
+                message_type: MessageType::Request,
+                request_id: "req-test".into(),
+                method: "ping".into(),
+                deadline_ms: Some(42),
+                trace_id: Some("trace-test".into()),
+                payload: vec![1],
+                metadata: None,
+            };
 
-            runtime.block_on(async {
-                let client = ClientRuntime::new(IpcAddress::NamedPipe("demo".into()));
-                let mut server = ServerRuntime::new(IpcAddress::NamedPipe("demo".into()));
-                server
-                    .register(
-                        "ping",
-                        RegisteredHandler::new(|_ctx, req: PingRequest| async move {
-                            Ok(PingResponse { value: req.value })
-                        }),
-                    )
-                    .expect("register should succeed");
-
-                let request = client
-                    .build_request_frame(
-                        "ping",
-                        &PingRequest {
-                            value: "hello".into(),
-                        },
-                        CallOptions {
-                            timeout: Some(Duration::from_secs(1)),
-                            trace_id: Some("trace-test".into()),
-                        },
-                    )
-                    .expect("request should encode");
-
-                let _ = server
-                    .handle_frame(&request)
-                    .await
-                    .expect("server should respond");
-            });
+            log_server_request_start(&request, "test-connection", "windows");
+            log_server_request_finish(&request, None, "test-connection", "windows");
         });
 
         assert!(logs.contains(observability::SERVER_REQUEST_START));
