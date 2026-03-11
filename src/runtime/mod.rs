@@ -26,9 +26,6 @@ use crate::transport::unix::{bind_listener, cleanup_socket_file, connect_stream}
 use tokio::net::windows::named_pipe::NamedPipeClient;
 #[cfg(windows)]
 use crate::transport::windows_named_pipe::{create_server, open_client};
-#[cfg(windows)]
-use crate::transport::{read_frame_io, write_frame_io};
-
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 type RawHandler = Arc<
     dyn Fn(RequestContext, &[u8]) -> BoxFuture<Result<Vec<u8>, ServiceError>> + Send + Sync + 'static,
@@ -437,8 +434,13 @@ async fn execute_unix_call(
 ) -> Result<Vec<u8>, Error> {
     let client = ensure_connected_unix_client(addr, state).await?;
     let operation = async {
-        write_frame_io(client, frame).await.map_err(io_error_to_local)?;
-        read_frame_io(client).await.map_err(io_error_to_local)
+        crate::transport::write_frame_io(client, frame)
+            .await
+            .map_err(io_error_to_local)?;
+        let response: Vec<u8> = crate::transport::read_frame_io(client)
+            .await
+            .map_err(io_error_to_local)?;
+        Ok::<Vec<u8>, Error>(response)
     };
 
     match timeout {
@@ -497,8 +499,13 @@ async fn execute_windows_call(
 ) -> Result<Vec<u8>, Error> {
     let client = ensure_connected_client(addr, state).await?;
     let operation = async {
-        write_frame_io(client, frame).await.map_err(io_error_to_local)?;
-        read_frame_io(client).await.map_err(io_error_to_local)
+        crate::transport::write_frame_io(client, frame)
+            .await
+            .map_err(io_error_to_local)?;
+        let response: Vec<u8> = crate::transport::read_frame_io(client)
+            .await
+            .map_err(io_error_to_local)?;
+        Ok::<Vec<u8>, Error>(response)
     };
 
     match timeout {
@@ -574,7 +581,7 @@ async fn handle_named_pipe_connection(
 ) -> Result<(), Error> {
     let connection_id = Uuid::new_v4().to_string();
     loop {
-        let frame = match read_frame_io(&mut connection).await {
+        let frame = match crate::transport::read_frame_io(&mut connection).await {
             Ok(frame) => frame,
             Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => {
                 log_connection_closed(&connection_id, platform_name());
@@ -587,7 +594,7 @@ async fn handle_named_pipe_connection(
             Err(err) => return Err(io_error_to_local(err)),
         };
         let response = handle_frame_with_handlers(&handlers, &frame, &connection_id).await?;
-        write_frame_io(&mut connection, &response)
+        crate::transport::write_frame_io(&mut connection, &response)
             .await
             .map_err(io_error_to_local)?;
     }
@@ -600,7 +607,7 @@ async fn handle_unix_connection(
 ) -> Result<(), Error> {
     let connection_id = Uuid::new_v4().to_string();
     loop {
-        let frame = match read_frame_io(&mut connection).await {
+        let frame = match crate::transport::read_frame_io(&mut connection).await {
             Ok(frame) => frame,
             Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => {
                 log_connection_closed(&connection_id, platform_name());
@@ -613,7 +620,7 @@ async fn handle_unix_connection(
             Err(err) => return Err(io_error_to_local(err)),
         };
         let response = handle_frame_with_handlers(&handlers, &frame, &connection_id).await?;
-        write_frame_io(&mut connection, &response)
+        crate::transport::write_frame_io(&mut connection, &response)
             .await
             .map_err(io_error_to_local)?;
     }
